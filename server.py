@@ -61,7 +61,7 @@ def is_safe_url(url: str) -> bool:
 
 
 # Function to bypass Cloudflare protection
-def bypass_cloudflare(url: str, retries: int, log: bool, proxy: str = None) -> ChromiumPage:
+def bypass_cloudflare(url: str, retries: int, log: bool, proxy: str = None, user_agent: str = None) -> ChromiumPage:
 
     options = ChromiumOptions().auto_port()
     if DOCKER_MODE:
@@ -75,6 +75,9 @@ def bypass_cloudflare(url: str, retries: int, log: bool, proxy: str = None) -> C
         
     if proxy:
         options.set_proxy(proxy)
+
+    if user_agent:
+        options.set_user_agent(user_agent)
     
     driver = ChromiumPage(addr_or_opts=options)
     try:
@@ -89,11 +92,11 @@ def bypass_cloudflare(url: str, retries: int, log: bool, proxy: str = None) -> C
 
 # Endpoint to get cookies
 @app.get("/cookies", response_model=CookieResponse)
-async def get_cookies(url: str, retries: int = 5, proxy: str = None):
+async def get_cookies(url: str, retries: int = 5, proxy: str = None, user_agent: str = None):
     if not is_safe_url(url):
         raise HTTPException(status_code=400, detail="Invalid URL")
     try:
-        driver = bypass_cloudflare(url, retries, log, proxy)
+        driver = bypass_cloudflare(url, retries, log, proxy, user_agent)
         cookies = {cookie.get("name", ""): cookie.get("value", " ") for cookie in driver.cookies()}
         user_agent = driver.user_agent
         driver.quit()
@@ -104,11 +107,11 @@ async def get_cookies(url: str, retries: int = 5, proxy: str = None):
 
 # Endpoint to get HTML content and cookies
 @app.get("/html")
-async def get_html(url: str, retries: int = 5, proxy: str = None):
+async def get_html(url: str, retries: int = 5, proxy: str = None, user_agent: str = None):
     if not is_safe_url(url):
         raise HTTPException(status_code=400, detail="Invalid URL")
     try:
-        driver = bypass_cloudflare(url, retries, log, proxy)
+        driver = bypass_cloudflare(url, retries, log, proxy, user_agent=user_agent)
         html = driver.html
         cookies_json = {cookie.get("name", ""): cookie.get("value", " ") for cookie in driver.cookies()}
         response = Response(content=html, media_type="text/html")
