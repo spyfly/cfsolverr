@@ -48,6 +48,43 @@ class CookieResponse(BaseModel):
     user_agent: str
 
 
+def generate_user_agent_metadata(user_agent: str):
+    # Define patterns for extracting details
+    platform_match = re.search(r'\(([^)]+)\)', user_agent)  # Extract content inside parentheses
+    browser_match = re.search(r'(\w+)/([\d.]+)', user_agent.split(' ')[-1])  # Extract browser brand and version
+
+    # Default values
+    metadata = {
+        "platform": "Unknown",
+        "platformVersion": "Unknown",
+        "architecture": "Unknown",
+        "model": "",
+        "mobile": False,
+        "brands": []
+    }
+
+    # Extract platform details
+    if platform_match:
+        platform_parts = platform_match.group(1).split(';')
+        metadata["platform"] = platform_parts[0].strip()  # First part is usually the OS
+        if len(platform_parts) > 1:
+            metadata["architecture"] = platform_parts[1].strip()
+
+        # Extract Windows version (if applicable)
+        if "Windows NT" in metadata["platform"]:
+            win_ver_match = re.search(r'Windows NT (\d+\.\d+)', metadata["platform"])
+            if win_ver_match:
+                metadata["platformVersion"] = win_ver_match.group(1)
+
+    # Extract browser brand and version
+    if browser_match:
+        metadata["brands"] = [{"brand": "Chrome", "version": re.search(r'Chrome/([\d]+)', user_agent).group(1) }]
+
+    # Determine if it's a mobile device
+    metadata["mobile"] = "Mobile" in user_agent or "Android" in user_agent
+
+    return metadata
+
 # Function to check if the URL is safe
 def is_safe_url(url: str) -> bool:
     parsed_url = urlparse(url)
@@ -77,11 +114,24 @@ def bypass_cloudflare(url: str, retries: int, log: bool, proxy: str = None, user
         options.set_proxy(proxy)
 
     if user_agent:
+        print(f"Setting user agent to {user_agent}")
         options.set_user_agent(user_agent)
     
     driver = ChromiumPage(addr_or_opts=options)
     try:
+        if user_agent:
+            driver.run_cdp('Network.setUserAgentOverride', 
+                userAgent=user_agent,
+                userAgentMetadata={
+                    "platform": "",
+                    "platformVersion": "",
+                    "architecture": "",
+                    "model": "",
+                    "mobile": False,
+                    "brands": []
+            })
         driver.get(url)
+
         cf_bypasser = CloudflareBypasser(driver, retries, log)
         cf_bypasser.bypass()
         return driver
